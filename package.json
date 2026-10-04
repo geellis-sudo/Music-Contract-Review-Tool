@@ -1,0 +1,23 @@
+{
+  "name": "contract-clarity",
+  "version": "0.1.0",
+  "description": "Plain-English breakdowns of music industry contracts for artists.",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "server": "node server/server.js",
+    "client": "npm --prefix client run dev",
+    "dev": "concurrently -n server,client \"npm run server\" \"npm run client\"",
+    "setup": "npm install && npm --prefix client install"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
