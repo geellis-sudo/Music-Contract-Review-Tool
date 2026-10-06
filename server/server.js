@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import Anthropic from "@anthropic-ai/sdk";
-import { buildClassifyPrompt, buildResearchPrompt } from "./prompts.js";
+import { buildClassifyPrompt, buildResearchPrompt, buildConflictPrompt } from "./prompts.js";
 
 dotenv.config();
 
@@ -39,7 +39,7 @@ app.post("/api/analyze", async (req, res) => {
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [{ role: "user", content: buildClassifyPrompt(contractText) }],
     });
     res.json({ text: extractText(msg) });
@@ -51,13 +51,16 @@ app.post("/api/analyze", async (req, res) => {
 
 // --- 2. Research agent (WITH web search) ------------------------------------
 app.post("/api/research", async (req, res) => {
-  const { categories, operativeName } = req.body || {};
+  const { classification } = req.body || {};
+  if (!classification || !Array.isArray(classification.clauses)) {
+    return res.status(400).json({ error: "No analysis provided to research." });
+  }
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 4000,
       messages: [
-        { role: "user", content: buildResearchPrompt(categories, operativeName) },
+        { role: "user", content: buildResearchPrompt(classification) },
       ],
       tools: [
         {
@@ -71,6 +74,25 @@ app.post("/api/research", async (req, res) => {
   } catch (err) {
     console.error("research failed:", err);
     res.status(500).json({ error: err.message || "Research failed." });
+  }
+});
+
+// --- 3. Conflicts between related documents (no tools) ---------------------
+app.post("/api/conflicts", async (req, res) => {
+  const { documents } = req.body || {};
+  if (!Array.isArray(documents) || documents.length < 2) {
+    return res.status(400).json({ error: "At least two analyzed documents are needed." });
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 4000,
+      messages: [{ role: "user", content: buildConflictPrompt(documents) }],
+    });
+    res.json({ text: extractText(msg) });
+  } catch (err) {
+    console.error("conflicts failed:", err);
+    res.status(500).json({ error: err.message || "Comparison failed." });
   }
 });
 

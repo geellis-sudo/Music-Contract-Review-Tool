@@ -9,21 +9,43 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');`;
 
 const CATEGORY_ORDER = [
+  "compensation",
+  "fees_repayment",
   "advances",
   "recoupment",
+  "exclusivity",
   "publishing",
+  "ownership",
   "merchandising",
   "likeness",
   "term_territory",
+  "termination",
+  "confidentiality",
+  "release_of_claims",
+  "dispute_resolution",
+  "assignment",
+  "drafting",
+  "other",
 ];
 
 const CATEGORY_LABEL = {
+  compensation: "Commission & Compensation",
+  fees_repayment: "Fees & Repayment",
   advances: "Advances",
   recoupment: "Recoupment",
+  exclusivity: "Exclusivity",
   publishing: "Publishing Rights",
+  ownership: "Ownership of Your Work & Materials",
   merchandising: "Merchandising",
   likeness: "Name, Image & Likeness",
   term_territory: "Term & Territory",
+  termination: "Getting Out (Termination)",
+  confidentiality: "Confidentiality",
+  release_of_claims: "Giving Up Your Right to Sue",
+  dispute_resolution: "Disputes & Arbitration",
+  assignment: "Transfer to Someone Else",
+  drafting: "Drafting Problems",
+  other: "Other Important Term",
 };
 
 const HARM_COLOR = {
@@ -196,7 +218,7 @@ function ClauseCard({ clause, research, contractText }) {
           color: "#EDE9E0",
           margin: 0,
         }}>
-          {CATEGORY_LABEL[clause.category] || clause.category}
+          {clause.category === "other" && clause.title ? clause.title : (CATEGORY_LABEL[clause.category] || clause.category)}
         </h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Pill color={harmColor}>Harm: {clause.harmLevel}</Pill>
@@ -226,6 +248,17 @@ function ClauseCard({ clause, research, contractText }) {
         </div>
       )}
 
+      {clause.statuteFlag && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 7,
+          background: "rgba(179,64,47,0.12)", border: "1px solid rgba(179,64,47,0.4)",
+          borderRadius: 6, padding: "8px 12px", marginBottom: 10,
+          fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#E08A75", lineHeight: 1.5,
+        }}>
+          <Scale size={15} style={{ flexShrink: 0, marginTop: 2 }} /> <span><strong>Law check: </strong>{clause.statuteFlag} Have an attorney confirm.</span>
+        </div>
+      )}
+
       {clause.harmDuration && (
         <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#9A968C", marginBottom: 4 }}>
           <strong style={{ color: "#C9C5BB" }}>How long this follows you: </strong>{clause.harmDuration}
@@ -241,6 +274,19 @@ function ClauseCard({ clause, research, contractText }) {
           <TrendingDown size={16} color="#B3402F" style={{ marginTop: 2, flexShrink: 0 }} />
           <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.5 }}>
             <strong style={{ color: "#EDE9E0" }}>Where the money goes: </strong>{clause.revenueImpact}
+          </div>
+        </div>
+      )}
+
+      {clause.worksInYourFavor && (
+        <div style={{
+          display: "flex", gap: 8, alignItems: "flex-start",
+          background: "rgba(92,131,104,0.10)", border: "1px solid rgba(92,131,104,0.35)",
+          borderRadius: 6, padding: "10px 12px", marginTop: 10,
+        }}>
+          <Check size={16} color="#7FB08C" style={{ marginTop: 2, flexShrink: 0 }} />
+          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.5 }}>
+            <strong style={{ color: "#EDE9E0" }}>Works in your favor: </strong>{clause.worksInYourFavor}
           </div>
         </div>
       )}
@@ -376,182 +422,178 @@ function ClauseCard({ clause, research, contractText }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Results for one document
+// ---------------------------------------------------------------------------
+function DocResult({ entry, multi }) {
+  const c = entry.classification;
+  const tile = (label, value, Icon) => (
+    <div style={{ flex: "1 1 200px", minWidth: 0, background: "#15171D", border: "1px solid #2A2E37", borderRadius: 7, padding: "12px 14px" }}>
+      <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#8B93A6", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>{label}</div>
+      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#EDE9E0", display: "flex", alignItems: "center", gap: 6 }}>
+        <Icon size={16} color="#C9A227" style={{ flexShrink: 0 }} /> {value}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 34 }}>
+      {multi && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <FileText size={16} color="#C9A227" />
+          <h2 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 22, color: "#EDE9E0", margin: 0, overflowWrap: "anywhere" }}>{entry.name}</h2>
+        </div>
+      )}
+      {entry.error ? (
+        <div style={{ color: "#E08A75", fontSize: 13.5, display: "flex", gap: 8, alignItems: "center" }}>
+          <AlertTriangle size={15} /> {entry.error}
+        </div>
+      ) : (
+        <>
+          <div style={{ background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 8, padding: "18px 20px", marginBottom: 22 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+              {tile("Choice of law", c.choiceOfLawState || "Not stated in contract", Scale)}
+              {tile("Counterparty", c.operativeName || "Not clearly identified", ShieldAlert)}
+            </div>
+            {(c.contractType || c.disputeForum) && (
+              <div style={{ marginTop: 12, fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.6 }}>
+                {c.contractType && <div><strong style={{ color: "#EDE9E0" }}>Contract type: </strong>{c.contractType}</div>}
+                {c.disputeForum && <div><strong style={{ color: "#EDE9E0" }}>Where disputes go: </strong>{c.disputeForum}</div>}
+              </div>
+            )}
+          </div>
+
+          {entry.kind && entry.kind !== "pdf" && (
+            <div style={{ fontSize: 12.5, color: "#6E6A61", marginBottom: 16, lineHeight: 1.5 }}>
+              References below use the contract's own section numbers. Page numbers aren't shown because {entry.kind === "docx" ? "Word documents" : "pasted text"} don't have fixed pages.
+            </div>
+          )}
+
+          {entry.researchStatus === "running" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9A968C", fontSize: 13.5, marginBottom: 18 }}>
+              <Loader2 size={15} className="spin" /> Researching how other artists experience these terms...
+            </div>
+          )}
+          {entry.researchStatus === "failed" && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 18, background: "rgba(201,138,46,0.10)", border: "1px solid rgba(201,138,46,0.35)", borderRadius: 6, padding: "10px 12px", color: "#D9B060", fontSize: 13 }}>
+              <AlertTriangle size={15} style={{ marginTop: 1, flexShrink: 0 }} />
+              <span>The "what other artists say" research didn't run, so the breakdown below is based on the contract text alone. Run the analysis again to retry.</span>
+            </div>
+          )}
+
+          {(c.clauses || []).slice()
+            .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
+            .map((clause, i) => (
+              <ClauseCard key={i} clause={clause} research={(entry.research || {})[clause.category]} contractText={entry.text} />
+            ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ConflictsPanel({ conflicts }) {
+  if (!conflicts) return null;
+  const box = { background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 8, padding: "18px 20px", marginTop: 34 };
+  return (
+    <div style={box}>
+      <h2 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 21, color: "#EDE9E0", margin: "0 0 4px" }}>Conflicts between these documents</h2>
+      <div style={{ fontSize: 13, color: "#9A968C", marginBottom: 12 }}>Terms in one document that clash with, or change the effect of, terms in another.</div>
+      {conflicts.status === "running" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9A968C", fontSize: 13.5 }}>
+          <Loader2 size={15} className="spin" /> Comparing the documents...
+        </div>
+      )}
+      {conflicts.status === "failed" && (
+        <div style={{ color: "#D9B060", fontSize: 13.5 }}>The comparison didn't complete. Run the analysis again to retry.</div>
+      )}
+      {conflicts.status === "ok" && conflicts.items.length === 0 && (
+        <div style={{ color: "#9A968C", fontSize: 13.5 }}>No conflicts found between these documents.</div>
+      )}
+      {conflicts.status === "ok" && conflicts.items.map((cf, i) => {
+        const color = HARM_COLOR[cf.harmLevel] || "#9A968C";
+        return (
+          <div key={i} style={{ borderLeft: `3px solid ${color}`, background: "#15171D", borderRadius: 6, padding: "12px 14px", marginTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <strong style={{ fontFamily: "'Inter', sans-serif", fontSize: 14.5, color: "#EDE9E0" }}>{cf.title}</strong>
+              <Pill color={color}>Harm: {cf.harmLevel}</Pill>
+            </div>
+            <p style={{ fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.55, margin: "8px 0 6px" }}>{cf.explanation}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {(cf.references || []).map((r, j) => (
+                <span key={j} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: "#C9C5BB", background: "#12141A", border: "1px solid #2A2E37", borderRadius: 4, padding: "2px 7px", overflowWrap: "anywhere" }}>
+                  {r.document}{(r.sections || []).length ? " · " + r.sections.map((x) => (/^\d/.test(String(x)) ? "§" + x : x)).join(", ") : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main app
+// ---------------------------------------------------------------------------
 export default function ContractClarity() {
-  const [contractText, setContractText] = useState("");
-  const [stage, setStage] = useState("idle"); // idle | extracting | classifying | researching | done | error
+  const [docs, setDocs] = useState([]); // [{id, name, kind, text}]
+  const [pasted, setPasted] = useState("");
+  const [stage, setStage] = useState("idle"); // idle | extracting | analyzing | done
+  const [progress, setProgress] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
-  const [classification, setClassification] = useState(null);
-  const [research, setResearch] = useState({});
-  const [researchStatus, setResearchStatus] = useState("idle"); // idle | running | ok | empty | failed
-  const [researchDebug, setResearchDebug] = useState("");
+  const [results, setResults] = useState([]);
+  const [conflicts, setConflicts] = useState(null);
   const [copied, setCopied] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const [sourceKind, setSourceKind] = useState(""); // "pdf" | "docx" | "paste" | ""
   const fileInputRef = useRef(null);
+  const busy = stage === "extracting" || stage === "analyzing";
 
   async function extractPdf(file) {
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
     let text = "";
     for (let p = 1; p <= pdf.numPages; p++) {
-      const page = await pdf.getPage(p);
-      const content = await page.getTextContent();
-      // Insert a visible, machine-readable page marker so the analysis can cite pages.
-      text += "\n===== PAGE " + p + " =====\n";
-      text += content.items.map((it) => it.str).join(" ") + "\n";
+      const content = await (await pdf.getPage(p)).getTextContent();
+      text += "\n===== PAGE " + p + " =====\n" + content.items.map((it) => it.str).join(" ") + "\n";
     }
     return text.trim();
   }
 
   async function extractDocx(file) {
-    const buf = await file.arrayBuffer();
-    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
     return (result.value || "").trim();
   }
 
-  const handleFile = useCallback(async (file) => {
-    if (!file) return;
+  const handleFiles = useCallback((fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
     setErrorMsg("");
-    setClassification(null);
-    setResearch({});
-    const name = file.name.toLowerCase();
-    const isPdf = name.endsWith(".pdf") || file.type === "application/pdf";
-    const isDocx = name.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-    if (!isPdf && !isDocx) {
-      setErrorMsg("That file type isn't supported. Please drop a PDF or a Word (.docx) file — or paste the text instead.");
-      return;
-    }
-
-    setFileName(file.name);
-    setStage("extracting");
-    try {
-      const text = isPdf ? await extractPdf(file) : await extractDocx(file);
-      if (!text || text.length < 40) {
-        setStage("idle");
-        setErrorMsg("Couldn't pull readable text from that file. If it's a scanned or photographed contract, paste the text in manually instead.");
-        return;
-      }
-      setContractText(text);
-      setSourceKind(isPdf ? "pdf" : "docx");
-      setStage("idle");
-    } catch (err) {
-      console.error(err);
-      setStage("idle");
-      setErrorMsg("Something went wrong reading that file. Try pasting the text in instead.");
-    }
+    const problems = [];
+    const added = [];
+    files.forEach((file) => {
+      const name = file.name.toLowerCase();
+      const isPdf = name.endsWith(".pdf") || file.type === "application/pdf";
+      const isDocx = name.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      if (!isPdf && !isDocx) { problems.push(file.name + ": only PDF or Word (.docx) files work"); return; }
+      added.push({ id: Date.now() + Math.random(), name: file.name, kind: isPdf ? "pdf" : "docx", file });
+    });
+    setDocs((d) => d.concat(added.filter((a) => !d.some((x) => x.name === a.name && x.file.size === a.file.size))));
+    if (problems.length) setErrorMsg(problems.join(" · "));
   }, []);
 
   function onDrop(e) {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    handleFile(file);
+    if (!busy) handleFiles(e.dataTransfer.files);
   }
 
-  function buildAnalysisText() {
-    if (!classification) return "";
-    const NEG = { low: "Rarely moves", medium: "Sometimes moves", high: "Often negotiable" };
-    const lines = [];
-    lines.push("CONTRACT CLARITY — ANALYSIS");
-    lines.push("This is not legal advice. Please consult an attorney for the most accurate legal information.");
-    lines.push("");
-    lines.push("Choice of law: " + (classification.choiceOfLawState || "Not stated in contract"));
-    lines.push("Counterparty: " + (classification.operativeName || "Not clearly identified"));
-    lines.push("");
-    lines.push("========================================");
-    lines.push("");
-
-    const ordered = (classification.clauses || [])
-      .slice()
-      .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category));
-
-    ordered.forEach((c) => {
-      lines.push((CATEGORY_LABEL[c.category] || c.category).toUpperCase());
-      const secs = (c.sections || []).map((s) => (/^\d/.test(String(s)) ? "§" + s : s));
-      const pgs = (c.pages || []).map((p) => "p." + p);
-      const refs = secs.concat(pgs);
-      if (refs.length) {
-        lines.push("In the contract: " + refs.join(", "));
-      }
-      lines.push("Harm level: " + c.harmLevel + "   |   Negotiability: " + (NEG[c.negotiability] || c.negotiability));
-      if (c.harmLevel === "high") {
-        lines.push(">> Worth raising with an attorney.");
-      }
-      lines.push("");
-      lines.push(c.plainEnglish || "");
-      if (c.harmDuration) {
-        lines.push("");
-        lines.push("How long this follows you: " + c.harmDuration);
-      }
-      if (c.revenueImpact) {
-        lines.push("");
-        lines.push("Where the money goes: " + c.revenueImpact);
-      }
-      const r = research[c.category];
-      if (r && ((r.general && r.general.length) || (r.operative && r.operative.length))) {
-        lines.push("");
-        lines.push("What other artists say:");
-        (r.general || []).forEach((it) => {
-          lines.push("  - " + it.finding + "  [" + it.sourceTag + "]");
-        });
-        (r.operative || []).forEach((it) => {
-          lines.push("  - " + it.finding + "  [" + it.sourceTag + "]");
-        });
-      }
-      lines.push("");
-      lines.push("----------------------------------------");
-      lines.push("");
-    });
-
-    lines.push("As a reminder, consult an attorney" + (classification.choiceOfLawState ? " licensed in " + classification.choiceOfLawState : "") + ".");
-
-    return lines.join("\n");
+  function removeDoc(id) {
+    setDocs((d) => d.filter((x) => x.id !== id));
   }
 
-  async function handleCopy() {
-    const text = buildAnalysisText();
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (e) {
-      // Fallback for environments where the clipboard API is blocked
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); } catch (_) {}
-      document.body.removeChild(ta);
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  function clearAll() {
+    setDocs([]); setPasted(""); setResults([]); setConflicts(null); setErrorMsg("");
   }
 
-  function handleDownload() {
-    const text = buildAnalysisText();
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const base = (fileName || "contract").replace(/\.[^.]+$/, "");
-    a.href = url;
-    a.download = base + "-analysis.txt";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  function clearFile() {
-    setFileName("");
-    setContractText("");
-    setSourceKind("");
-    setErrorMsg("");
-    setClassification(null);
-    setResearch({});
-  }
-
-  // Talk to the local backend, which holds the API key and the prompts.
-  // Returns { text } on success or { error: { message } } on failure.
   async function callBackend(path, payload) {
     let res;
     try {
@@ -561,365 +603,323 @@ export default function ContractClarity() {
         body: JSON.stringify(payload),
       });
     } catch (netErr) {
-      return { error: { message: "Network request failed — the tool couldn't reach the analysis service." } };
+      return { error: "Couldn't reach the Contract Clarity server. Is it running (npm run dev)?" };
     }
     let data;
     try {
       data = await res.json();
     } catch (parseErr) {
-      return { error: { message: "The service replied with something that wasn't readable (status " + res.status + ")." } };
+      return { error: "The server replied with something unreadable (status " + res.status + ")." };
     }
-    if (data.error) return { error: { message: data.error } };
-    if (!res.ok) return { error: { message: "The service returned status " + res.status + "." } };
-    return data;
+    if (!res.ok || data.error) return { error: data.error || "The server returned status " + res.status + "." };
+    return { text: data.text };
   }
 
   function parseJson(raw) {
     if (!raw) throw new Error("empty");
     let cleaned = raw.replace(/```json|```/g, "").trim();
-    // Isolate the outermost JSON object/array in case the model added prose.
-    const firstBrace = cleaned.search(/[{[]/);
-    const lastBrace = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
-    }
+    const first = cleaned.search(/[{[]/);
+    const last = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
+    if (first !== -1 && last > first) cleaned = cleaned.slice(first, last + 1);
     return JSON.parse(cleaned);
   }
 
   async function handleAnalyze() {
-    if (!contractText.trim()) return;
-    setErrorMsg("");
-    setClassification(null);
-    setResearch({});
-    setResearchStatus("idle");
-    setResearchDebug("");
-    setStage("classifying");
+    const list = docs.map((d) => ({ name: d.name, kind: d.kind, file: d.file }));
+    if (pasted.trim()) list.push({ name: "Pasted text", kind: "paste", text: pasted.trim() });
+    if (!list.length) return;
+    setErrorMsg(""); setResults([]); setConflicts(null); setStage("analyzing");
 
-    try {
-      const classifyData = await callBackend("/api/analyze", { contractText });
-      // Surface an API-level error if the call itself was rejected.
-      if (classifyData && classifyData.error) {
-        const m = classifyData.error.message || JSON.stringify(classifyData.error);
-        throw new Error("API error: " + m);
+    const acc = [];
+    const push = () => setResults(acc.map(({ file, ...x }) => ({ ...x })));
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i];
+      const tag = list.length > 1 ? ` (${i + 1} of ${list.length})` : "";
+      setProgress(`Reading ${d.name}${tag}...`);
+      const entry = { ...d };
+      acc.push(entry);
+      if (d.file) {
+        try {
+          entry.text = d.kind === "pdf" ? await extractPdf(d.file) : await extractDocx(d.file);
+        } catch (err) {
+          console.error(err);
+          entry.error = "This file couldn't be read. Try pasting its text instead.";
+          push(); continue;
+        }
+        if (!entry.text || entry.text.replace(/=====\s*PAGE\s+\d+\s*=====/g, "").trim().length < 40) {
+          entry.error = "No readable text in this file. If it's a scanned contract, paste the text instead.";
+          push(); continue;
+        }
       }
-      const classifyText = classifyData.text || "";
-      if (!classifyText) {
-        const shape = classifyData ? JSON.stringify(classifyData).slice(0, 300) : "no response object";
-        throw new Error("The analysis step returned no readable text. Raw response: " + shape);
-      }
-      let parsedClassification;
+      const r = await callBackend("/api/analyze", { contractText: entry.text });
+      if (r.error) { entry.error = r.error; push(); continue; }
+      try { entry.classification = parseJson(r.text); }
+      catch (e) { entry.error = "The analysis reply couldn't be read. Try again."; push(); continue; }
+      entry.researchStatus = "running";
+      push();
+
+      setProgress(`Researching ${d.name}${tag}...`);
+      const rr = await callBackend("/api/research", { classification: entry.classification });
       try {
-        parsedClassification = parseJson(classifyText);
+        if (rr.error) throw new Error(rr.error);
+        const parsed = parseJson(rr.text);
+        entry.research = parsed;
+        entry.researchStatus = "ok";
       } catch (e) {
-        throw new Error("The analysis reply couldn't be read as data. It started with: " + classifyText.slice(0, 200));
+        entry.research = {};
+        entry.researchStatus = "failed";
       }
-      setClassification(parsedClassification);
-      setStage("researching");
-      setResearchStatus("running");
-
-      const categories = (parsedClassification.clauses || []).map((c) => c.category);
-      const researchData = await callBackend("/api/research", {
-        categories,
-        operativeName: parsedClassification.operativeName,
-      });
-      const researchText = (researchData && researchData.text) || "";
-      let parsedResearch = {};
-      let ok = false;
-      try {
-        parsedResearch = parseJson(researchText);
-        ok = true;
-      } catch (e) {
-        // Capture why it failed so it isn't a silent dead end.
-        const apiErr = researchData && researchData.error
-          ? (researchData.error.message || JSON.stringify(researchData.error))
-          : null;
-        setResearchDebug(
-          apiErr
-            ? "The research service returned an error: " + apiErr
-            : "The research step ran but its reply couldn't be read as data. This usually means web search isn't available in this environment."
-        );
-      }
-      setResearch(parsedResearch);
-
-      // Did we actually get any findings?
-      const hasFindings = Object.values(parsedResearch || {}).some(
-        (v) => v && ((v.general && v.general.length) || (v.operative && v.operative.length))
-      );
-      if (!ok) setResearchStatus("failed");
-      else if (hasFindings) setResearchStatus("ok");
-      else setResearchStatus("empty");
-
-      setStage("done");
-    } catch (err) {
-      console.error(err);
-      setErrorMsg((err && err.message) ? err.message : "Something went wrong analyzing this contract. You can try again.");
-      setStage("error");
+      push();
     }
+
+    const good = acc.filter((e) => e.classification);
+    if (good.length >= 2) {
+      setProgress("Comparing the documents against each other...");
+      setConflicts({ status: "running", items: [] });
+      const cr = await callBackend("/api/conflicts", { documents: good.map((g) => ({ name: g.name, text: g.text, classification: g.classification })) });
+      try {
+        if (cr.error) throw new Error(cr.error);
+        const parsed = parseJson(cr.text);
+        setConflicts({ status: "ok", items: parsed.conflicts || [] });
+      } catch (e) {
+        setConflicts({ status: "failed", items: [] });
+      }
+    }
+    setProgress("");
+    setStage("done");
   }
 
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#14161B",
-      padding: "32px 16px 64px",
-      fontFamily: "'Inter', sans-serif",
-    }}>
-      <style>{FONT_IMPORT}</style>
+  function buildAnalysisText() {
+    const NEG = { low: "Rarely moves", medium: "Sometimes moves", high: "Often negotiable" };
+    const lines = [];
+    lines.push("CONTRACT CLARITY — ANALYSIS");
+    lines.push("This is not legal advice. Please consult an attorney for the most accurate legal information.");
+    lines.push("");
+    if (conflicts && conflicts.status === "ok") {
+      lines.push("========================================");
+      lines.push("CONFLICTS BETWEEN THESE DOCUMENTS");
+      lines.push("========================================");
+      if (!conflicts.items.length) lines.push("None found.");
+      conflicts.items.forEach((cf) => {
+        lines.push("");
+        lines.push(cf.title.toUpperCase() + "   |   Harm level: " + cf.harmLevel);
+        lines.push(cf.explanation);
+        const refs = (cf.references || []).map((r) => r.document + ((r.sections || []).length ? " " + r.sections.join(", ") : ""));
+        if (refs.length) lines.push("Where: " + refs.join("; "));
+      });
+      lines.push("");
+    }
+    results.forEach((e) => {
+      lines.push("========================================");
+      lines.push("DOCUMENT: " + e.name);
+      lines.push("========================================");
+      if (e.error) { lines.push("Not analyzed: " + e.error); lines.push(""); return; }
+      const c = e.classification;
+      lines.push("Contract type: " + (c.contractType || "Not identified"));
+      lines.push("Choice of law: " + (c.choiceOfLawState || "Not stated in contract"));
+      if (c.disputeForum) lines.push("Where disputes go: " + c.disputeForum);
+      lines.push("Counterparty: " + (c.operativeName || "Not clearly identified"));
+      lines.push("");
+      (c.clauses || []).slice()
+        .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
+        .forEach((cl) => {
+          lines.push(((cl.category === "other" && cl.title) ? cl.title : (CATEGORY_LABEL[cl.category] || cl.category)).toUpperCase());
+          const refs = (cl.sections || []).map((s) => (/^\d/.test(String(s)) ? "§" + s : s)).concat((cl.pages || []).map((p) => "p." + p));
+          if (refs.length) lines.push("In the contract: " + refs.join(", "));
+          lines.push("Harm level: " + cl.harmLevel + "   |   Negotiability: " + (NEG[cl.negotiability] || cl.negotiability));
+          if (cl.harmLevel === "high") lines.push(">> Worth raising with an attorney.");
+          lines.push("");
+          lines.push(cl.plainEnglish || "");
+          if (cl.statuteFlag) { lines.push(""); lines.push("Law check: " + cl.statuteFlag + " Have an attorney confirm."); }
+          if (cl.harmDuration) { lines.push(""); lines.push("How long this follows you: " + cl.harmDuration); }
+          if (cl.revenueImpact) { lines.push(""); lines.push("Where the money goes: " + cl.revenueImpact); }
+          if (cl.worksInYourFavor) { lines.push(""); lines.push("Works in your favor: " + cl.worksInYourFavor); }
+          const r = (e.research || {})[cl.category];
+          if (r && ((r.general && r.general.length) || (r.operative && r.operative.length))) {
+            lines.push("");
+            lines.push("What other artists say:");
+            (r.general || []).concat(r.operative || []).forEach((it) => lines.push("  - " + it.finding + "  [" + it.sourceTag + "]"));
+          }
+          lines.push("");
+          lines.push("----------------------------------------");
+          lines.push("");
+        });
+    });
+    const state = (results.find((e) => e.classification && e.classification.choiceOfLawState) || {}).classification;
+    lines.push("As a reminder, consult an attorney" + (state ? " licensed in " + state.choiceOfLawState.replace(/\s*\(.*\)$/, "") : "") + ".");
+    return lines.join("\n");
+  }
 
+  async function handleCopy() {
+    const text = buildAnalysisText();
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (_) {}
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function handleDownload() {
+    const text = buildAnalysisText();
+    const base = results.length === 1 ? results[0].name.replace(/\.[^.]+$/, "") : "contracts";
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = base + "-analysis.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const canAnalyze = (docs.length > 0 || pasted.trim()) && !busy;
+  const totalDocs = docs.length + (pasted.trim() ? 1 : 0);
+  const firstState = (results.find((e) => e.classification && e.classification.choiceOfLawState) || {}).classification;
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); if (!busy) setDragOver(true); }}
+      onDragLeave={(e) => { if (e.currentTarget === e.target || !e.relatedTarget) setDragOver(false); }}
+      onDrop={onDrop}
+      style={{ minHeight: "100vh", background: "#14161B", padding: "32px 16px 64px", fontFamily: "'Inter', sans-serif" }}>
+      <style>{FONT_IMPORT}</style>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <Music2 size={22} color="#C9A227" />
-          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, letterSpacing: "0.08em", color: "#8B93A6", textTransform: "uppercase" }}>
-            Contract Clarity
-          </span>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 12, letterSpacing: "0.08em", color: "#8B93A6", textTransform: "uppercase" }}>Contract Clarity</span>
         </div>
-        <h1 style={{
-          fontFamily: "'Fraunces', serif",
-          fontWeight: 700,
-          fontSize: "clamp(28px, 5vw, 40px)",
-          color: "#EDE9E0",
-          margin: "0 0 10px",
-          lineHeight: 1.15,
-        }}>
+        <h1 style={{ fontFamily: "'Fraunces', serif", fontWeight: 700, fontSize: "clamp(28px, 5vw, 40px)", color: "#EDE9E0", margin: "0 0 10px", lineHeight: 1.15 }}>
           Know what you're signing.
         </h1>
         <p style={{ color: "#9A968C", fontSize: 15, lineHeight: 1.6, maxWidth: 560, margin: "0 0 6px" }}>
-          Paste a music contract below. This breaks it down in plain English — what's negotiable, what isn't, and where the money actually goes.
+          Upload one contract, or several that go together. This breaks each one down in plain English, and checks related documents against each other.
         </p>
         <Disclaimer text="This is not legal advice. Please consult an attorney for the most accurate legal information." />
 
         <div style={{ marginTop: 28 }}>
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
-            onDrop={onDrop}
-            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            onClick={() => !busy && fileInputRef.current && fileInputRef.current.click()}
             style={{
               border: `1.5px dashed ${dragOver ? "#C9A227" : "#3A3D45"}`,
               background: dragOver ? "rgba(201,162,39,0.06)" : "#1B1E25",
-              borderRadius: 8,
-              padding: "22px 20px",
-              textAlign: "center",
-              cursor: "pointer",
-              marginBottom: 14,
-              transition: "border-color 0.15s, background 0.15s",
+              borderRadius: 8, padding: "22px 20px", textAlign: "center", cursor: busy ? "default" : "pointer",
+              marginBottom: 14, transition: "border-color 0.15s, background 0.15s",
             }}
           >
             <input
-              ref={fileInputRef}
-              type="file"
+              ref={fileInputRef} type="file" multiple
               accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               style={{ display: "none" }}
-              onChange={(e) => handleFile(e.target.files && e.target.files[0])}
+              onChange={(e) => { handleFiles(e.target.files); e.target.value = ""; }}
             />
             {stage === "extracting" ? (
               <div style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#C9A227", fontSize: 14, fontWeight: 600 }}>
-                <Loader2 size={16} className="spin" /> Reading {fileName || "file"}...
-              </div>
-            ) : fileName ? (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 10, color: "#EDE9E0", fontSize: 14 }}>
-                <FileText size={16} color="#C9A227" />
-                <span style={{ fontWeight: 600 }}>{fileName}</span>
-                <span style={{ color: "#5C8368", fontSize: 12.5 }}>· text loaded below</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); clearFile(); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#8B93A6", display: "inline-flex", padding: 2 }}
-                  title="Clear"
-                >
-                  <X size={15} />
-                </button>
+                <Loader2 size={16} className="spin" /> {progress || "Reading..."}
               </div>
             ) : (
               <>
                 <div style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#C9C5BB", fontSize: 14.5, fontWeight: 600 }}>
-                  <Upload size={16} color="#C9A227" /> Drag a contract here, or click to choose a file
+                  <Upload size={16} color="#C9A227" /> {dragOver ? "Drop to add" : docs.length ? "Add another contract" : "Drop contracts anywhere on this page, or click to choose"}
                 </div>
-                <div style={{ color: "#6E6A61", fontSize: 12.5, marginTop: 6 }}>
-                  PDF or Word (.docx) · or paste the text below
-                </div>
+                <div style={{ color: "#6E6A61", fontSize: 12.5, marginTop: 6 }}>PDF or Word (.docx) · one or several · nothing is read until you click Analyze</div>
               </>
             )}
           </div>
 
+          {docs.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {docs.map((d) => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 7, padding: "9px 12px", color: "#EDE9E0", fontSize: 14 }}>
+                  <FileText size={16} color="#C9A227" style={{ flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{d.name}</span>
+                  <span style={{ color: "#5C8368", fontSize: 12.5, whiteSpace: "nowrap" }}>added</span>
+                  <button onClick={() => removeDoc(d.id)} disabled={busy} title="Remove"
+                    style={{ background: "none", border: "none", cursor: busy ? "default" : "pointer", color: "#8B93A6", display: "inline-flex", padding: 2 }}>
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <textarea
-            value={contractText}
-            onChange={(e) => { setContractText(e.target.value); if (!fileName) setSourceKind("paste"); }}
-            placeholder="...or paste the full text of the contract here."
+            id="pasted-text"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            placeholder="...or paste the full text of a contract here."
             style={{
-              width: "100%",
-              minHeight: 200,
-              background: "#1B1E25",
-              border: "1px solid #2A2E37",
-              borderRadius: 8,
-              color: "#EDE9E0",
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: 13,
-              lineHeight: 1.6,
-              padding: 16,
-              boxSizing: "border-box",
-              resize: "vertical",
+              width: "100%", minHeight: docs.length ? 90 : 200, background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 8,
+              color: "#EDE9E0", fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, lineHeight: 1.6, padding: 16,
+              boxSizing: "border-box", resize: "vertical",
             }}
           />
 
-          <button
-            onClick={handleAnalyze}
-            disabled={!contractText.trim() || stage === "extracting" || stage === "classifying" || stage === "researching"}
-            style={{
-              marginTop: 14,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              background: contractText.trim() ? "#C9A227" : "#3A3D45",
-              color: contractText.trim() ? "#14161B" : "#8B93A6",
-              border: "none",
-              borderRadius: 7,
-              padding: "11px 20px",
-              fontFamily: "'Inter', sans-serif",
-              fontWeight: 600,
-              fontSize: 14,
-              cursor: contractText.trim() ? "pointer" : "not-allowed",
-            }}
-          >
-            {stage === "classifying" || stage === "researching" ? (
-              <>
-                <Loader2 size={16} className="spin" />
-                {stage === "classifying" ? "Reading the contract..." : "Researching..."}
-              </>
-            ) : (
-              <>
-                <Upload size={16} />
-                Analyze contract
-              </>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
+            <button
+              onClick={handleAnalyze}
+              disabled={!canAnalyze}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                background: canAnalyze ? "#C9A227" : "#3A3D45", color: canAnalyze ? "#14161B" : "#8B93A6",
+                border: "none", borderRadius: 7, padding: "11px 20px", fontWeight: 600, fontSize: 14,
+                cursor: canAnalyze ? "pointer" : "not-allowed",
+              }}
+            >
+              {stage === "analyzing" ? (<><Loader2 size={16} className="spin" /> Working...</>)
+                : (<><Upload size={16} /> {totalDocs > 1 ? "Analyze contracts" : "Analyze contract"}</>)}
+            </button>
+            {(docs.length > 0 || pasted || results.length > 0) && !busy && (
+              <button onClick={clearAll} style={{ background: "none", border: "none", color: "#8B93A6", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                Start over
+              </button>
             )}
-          </button>
+            {stage === "analyzing" && progress && <span style={{ color: "#9A968C", fontSize: 13 }}>{progress}</span>}
+          </div>
           <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
 
           {errorMsg && (
-            <div style={{ marginTop: 12, color: "#E08A75", fontSize: 13.5, display: "flex", gap: 8, alignItems: "center" }}>
-              <AlertTriangle size={15} /> {errorMsg}
+            <div style={{ marginTop: 12, color: "#E08A75", fontSize: 13.5, display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> <span>{errorMsg}</span>
             </div>
           )}
         </div>
 
-        {classification && (
-          <div style={{ marginTop: 40 }}>
-            <div style={{
-              background: "#1B1E25",
-              border: "1px solid #2A2E37",
-              borderRadius: 8,
-              padding: "18px 20px",
-              marginBottom: 22,
-            }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                <div style={{
-                  flex: "1 1 200px",
-                  background: "#15171D", border: "1px solid #2A2E37", borderRadius: 7,
-                  padding: "12px 14px",
+        {results.length > 0 && (
+          <div style={{ marginTop: 34 }}>
+            {stage === "done" && (
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={handleCopy} style={{
+                  flex: "1 1 0", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  background: copied ? "rgba(92,131,104,0.15)" : "#1B1E25", border: `1px solid ${copied ? "#5C8368" : "#2A2E37"}`,
+                  borderRadius: 7, padding: "10px 13px", cursor: "pointer", fontWeight: 600, fontSize: 13, color: copied ? "#7FB08C" : "#C9C5BB",
                 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#8B93A6", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Choice of law</div>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#EDE9E0", display: "flex", alignItems: "center", gap: 6 }}>
-                    <Scale size={16} color="#C9A227" style={{ flexShrink: 0 }} /> {classification.choiceOfLawState || "Not stated in contract"}
-                  </div>
-                </div>
-                <div style={{
-                  flex: "1 1 200px",
-                  background: "#15171D", border: "1px solid #2A2E37", borderRadius: 7,
-                  padding: "12px 14px",
-                }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, color: "#8B93A6", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Counterparty</div>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: "#EDE9E0", display: "flex", alignItems: "center", gap: 6 }}>
-                    <ShieldAlert size={16} color="#C9A227" style={{ flexShrink: 0 }} /> {classification.operativeName || "Not clearly identified"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                <button
-                  onClick={handleCopy}
-                  style={{
-                    flex: "1 1 0",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    background: copied ? "rgba(92,131,104,0.15)" : "#15171D",
-                    border: `1px solid ${copied ? "#5C8368" : "#2A2E37"}`,
-                    borderRadius: 7, padding: "10px 13px", cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
-                    color: copied ? "#7FB08C" : "#C9C5BB",
-                  }}
-                >
                   {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy analysis</>}
                 </button>
-                <button
-                  onClick={handleDownload}
-                  style={{
-                    flex: "1 1 0",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-                    background: "#15171D", border: "1px solid #2A2E37",
-                    borderRadius: 7, padding: "10px 13px", cursor: "pointer",
-                    fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13,
-                    color: "#C9C5BB",
-                  }}
-                >
+                <button onClick={handleDownload} style={{
+                  flex: "1 1 0", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 7, padding: "10px 13px",
+                  cursor: "pointer", fontWeight: 600, fontSize: 13, color: "#C9C5BB",
+                }}>
                   <Download size={14} /> Download
                 </button>
               </div>
-            </div>
-
-            {sourceKind && sourceKind !== "pdf" && (
-              <div style={{
-                fontFamily: "'Inter', sans-serif", fontSize: 12.5, color: "#6E6A61",
-                marginBottom: 16, lineHeight: 1.5,
-              }}>
-                References below use the contract's own section numbers. Page numbers aren't shown because {sourceKind === "docx" ? "Word documents" : "pasted text"} don't have fixed pages — upload the PDF version if you need page citations.
-              </div>
             )}
 
-            {researchStatus === "running" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9A968C", fontSize: 13.5, marginBottom: 18 }}>
-                <Loader2 size={15} className="spin" /> Looking into how other artists have experienced these terms...
-              </div>
-            )}
-            {researchStatus === "empty" && (
-              <div style={{
-                display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 18,
-                background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 6, padding: "10px 12px",
-                color: "#9A968C", fontSize: 13,
-              }}>
-                <Search size={15} style={{ marginTop: 1, flexShrink: 0 }} />
-                <span>The outside-research step ran but didn't return specific findings for these clauses. That's not the same as "all clear" — it just means nothing usable came back this time.</span>
-              </div>
-            )}
-            {researchStatus === "failed" && (
-              <div style={{
-                display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 18,
-                background: "rgba(201,138,46,0.10)", border: "1px solid rgba(201,138,46,0.35)", borderRadius: 6, padding: "10px 12px",
-                color: "#D9B060", fontSize: 13,
-              }}>
-                <AlertTriangle size={15} style={{ marginTop: 1, flexShrink: 0 }} />
-                <span>
-                  The "what other artists say" research didn't run successfully, so the breakdown below is based on the contract text alone.
-                  {researchDebug ? " " + researchDebug : ""}
-                </span>
-              </div>
-            )}
+            <ConflictsPanel conflicts={conflicts} />
 
-            {(classification.clauses || [])
-              .slice()
-              .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
-              .map((clause, i) => (
-                <ClauseCard key={i} clause={clause} research={research[clause.category]} contractText={contractText} />
-              ))}
+            {results.map((e, i) => <DocResult key={i} entry={e} multi={results.length > 1} />)}
 
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-              background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 8,
-              padding: "14px 18px", marginTop: 8,
-              fontFamily: "'Inter', sans-serif", fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.5,
-            }}>
-              <Scale size={16} color="#C9A227" style={{ flexShrink: 0 }} />
-              <span>
-                As a reminder, consult an attorney{classification.choiceOfLawState ? ` licensed in ${classification.choiceOfLawState}` : ""}.
-              </span>
-            </div>
+            {stage === "done" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 8, padding: "14px 18px", marginTop: 8, fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.5 }}>
+                <Scale size={16} color="#C9A227" style={{ flexShrink: 0 }} />
+                <span>As a reminder, consult an attorney{firstState ? ` licensed in ${firstState.choiceOfLawState.replace(/\s*\(.*\)$/, "")}` : ""}.</span>
+              </div>
+            )}
           </div>
         )}
       </div>
