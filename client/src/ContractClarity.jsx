@@ -518,6 +518,11 @@ function ConflictsPanel({ conflicts }) {
               <Pill color={color}>Harm: {cf.harmLevel}</Pill>
             </div>
             <p style={{ fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.55, margin: "8px 0 6px" }}>{cf.explanation}</p>
+            {cf.revises && cf.revises.note && (
+              <div style={{ fontSize: 12.5, color: "#C9C5BB", lineHeight: 1.5, background: "#1B1E25", border: "1px solid #2A2E37", borderRadius: 5, padding: "8px 10px", margin: "0 0 8px" }}>
+                <strong style={{ color: "#D9B060" }}>Changes the single-document reading{cf.revises.document ? ` of ${cf.revises.document}` : ""}{cf.revises.category ? ` (${cf.revises.category})` : ""}:</strong>{" "}{cf.revises.note}
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {(cf.references || []).map((r, j) => (
                 <span key={j} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11.5, color: "#C9C5BB", background: "#12141A", border: "1px solid #2A2E37", borderRadius: 4, padding: "2px 7px", overflowWrap: "anywhere" }}>
@@ -704,6 +709,9 @@ export default function ContractClarity() {
         lines.push("");
         lines.push(cf.title.toUpperCase() + "   |   Harm level: " + cf.harmLevel);
         lines.push(cf.explanation);
+        if (cf.revises && cf.revises.note) {
+          lines.push("Changes the single-document reading" + (cf.revises.document ? " of " + cf.revises.document : "") + (cf.revises.category ? " (" + cf.revises.category + ")" : "") + ": " + cf.revises.note);
+        }
         const refs = (cf.references || []).map((r) => r.document + ((r.sections || []).length ? " " + r.sections.join(", ") : ""));
         if (refs.length) lines.push("Where: " + refs.join("; "));
       });
