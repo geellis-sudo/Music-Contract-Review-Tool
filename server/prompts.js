@@ -1,3 +1,6 @@
+import { extractDocFacts, renderDocFacts } from "./docfacts.js";
+import { renderMarkup, renderMarkupBrief } from "./markup.js";
+
 // Prompt builders for the Claude calls. They live on the server so the API key
 // and prompts never reach the browser.
 
@@ -12,7 +15,9 @@ negotiability:
 - "medium" = changes are possible with pushback or leverage.
 - "high" = commonly changed on request (commission rate, term length, exclusivity scope, approval rights, confidentiality carve-outs, ownership vs. license of the artist's own materials).`;
 
-export function buildClassifyPrompt(text) {
+export function buildClassifyPrompt(text, markup) {
+  const facts = renderDocFacts(extractDocFacts(text));
+  const markupBlock = renderMarkup(markup);
   return `You are analyzing an entertainment-industry contract (music, talent agency, management, likeness release, or similar) for an artist who is not a lawyer. Read the contract text below and respond ONLY with valid JSON, no preamble, no markdown fences.
 
 Extract:
@@ -51,11 +56,16 @@ Extract:
   - "sections": the section/clause/paragraph identifiers WHERE THE LANGUAGE YOU RELY ON ACTUALLY APPEARS, exactly as numbered in the contract (e.g. ["4.2"] or ["Paragraph 7"]). If the language is in unnumbered text such as the opening paragraph or a signature page, use "Opening paragraph" or "Signature page". Never cite a section just because it is related. Empty array if the contract has no numbering at all.
   - "pages": an array of page numbers this analysis is based on, as integers. The contract text may contain markers like "===== PAGE 3 =====" — use those. If there are NO such page markers in the text, return an empty array (do not guess page numbers).
   - "sourceQuotes": an array of 1-3 SHORT verbatim quotes (each roughly 8-25 words) copied EXACTLY from the contract text — the specific language this analysis is based on. Copy the words as they literally appear. If nothing can be quoted, return an empty array.
+- "markupReview": an array. If the TRACKED CHANGES AND COMMENTS block is present below, cover EVERY material change in it; otherwise return an empty array. Each entry has: "what" (a short heading for the change), "before" (what the wording was before — quote the deleted text), "after" (what it says now, or "nothing" if text was simply removed), "effect" (2-3 plain-English sentences on what the change does to the artist), "harmLevel" ("low"|"medium"|"high" per the rubric, rating the CHANGE itself), and "theirReason" (the counterparty's comment explaining it, verbatim, or null). Judge each change by what it removes or adds, never by how the surviving text happens to read.
 
 ${RUBRIC}
 
 IMPORTANT: base "sections" and "pages" only on what is actually in the contract text. Never invent a section number or page that isn't there. Money terms (compensation, fees_repayment) are the most important — never omit them when present.
 
+===== DOCUMENT FACTS (computed from the text by code — authoritative) =====
+${facts}
+===== END DOCUMENT FACTS =====
+${markupBlock ? "\n===== TRACKED CHANGES AND COMMENTS (read from the file by code) =====\n" + markupBlock + "\n===== END TRACKED CHANGES AND COMMENTS =====\n" : ""}
 Contract text:
 ---
 ${text.slice(0, 60000)}
@@ -116,7 +126,9 @@ Governing law: ${c.choiceOfLawState || "not stated"}
 Disputes: ${c.disputeForum || "not stated"}
 ESTABLISHED FINDINGS for this document read on its own:
 ${findings[i]}
-Full text:
+DOCUMENT FACTS (computed from the text by code — authoritative, overrides your own reading):
+${renderDocFacts(extractDocFacts(e.text))}
+${renderMarkupBrief(e.markup) ? renderMarkupBrief(e.markup) + "\n" : ""}Full text:
 ${e.text.slice(0, per)}`;
   }).join("\n\n");
   return `These documents are being signed together by the same artist with the same company. Compare them and find CONFLICTS or INTERACTIONS between them that matter to the artist: for example, different dispute forums or costs, different governing law, one document's duration depending on an undefined term in another, inconsistent definitions, rights granted in one that undercut protections in the other, or obligations that stack. Only report real conflicts that are supported by the text. Respond ONLY with valid JSON, no preamble, no markdown fences:
