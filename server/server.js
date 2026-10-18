@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildClassifyPrompt, buildResearchPrompt, buildConflictPrompt } from "./prompts.js";
+import { extractDocFacts, auditClaims } from "./docfacts.js";
 
 dotenv.config();
 
@@ -32,7 +33,7 @@ function extractText(msg) {
 
 // --- 1. Clause analysis (no tools) -----------------------------------------
 app.post("/api/analyze", async (req, res) => {
-  const { contractText } = req.body || {};
+  const { contractText, markup } = req.body || {};
   if (!contractText || !contractText.trim()) {
     return res.status(400).json({ error: "No contract text provided." });
   }
@@ -40,9 +41,20 @@ app.post("/api/analyze", async (req, res) => {
     const msg = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 8000,
-      messages: [{ role: "user", content: buildClassifyPrompt(contractText) }],
+      messages: [{ role: "user", content: buildClassifyPrompt(contractText, markup) }],
     });
-    res.json({ text: extractText(msg) });
+    const text = extractText(msg);
+    // Check the model's figures against the document before they reach the user.
+    let audit = [];
+    try {
+      const cleaned = text.replace(/```json|```/g, "").trim();
+      const a = cleaned.search(/[{[]/);
+      const b = Math.max(cleaned.lastIndexOf("}"), cleaned.lastIndexOf("]"));
+      if (a !== -1 && b > a) {
+        audit = auditClaims(JSON.parse(cleaned.slice(a, b + 1)), contractText, extractDocFacts(contractText));
+      }
+    } catch (e) { audit = []; }
+    res.json({ text, audit });
   } catch (err) {
     console.error("analyze failed:", err);
     res.status(500).json({ error: err.message || "Analysis failed." });

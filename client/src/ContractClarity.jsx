@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from "react";
 import { Upload, Loader2, AlertTriangle, ShieldAlert, TrendingDown, Scale, Search, ChevronDown, ChevronUp, Music2, FileText, X, Copy, Check, Download } from "lucide-react";
 import mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
+import { extractDocxMarkup } from "./markup.js";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -468,6 +469,64 @@ function DocResult({ entry, multi }) {
             </div>
           )}
 
+          {entry.markup && entry.markup.hasMarkup && (
+            <div style={{ background: "#1B1E25", border: "1px solid rgba(201,162,39,0.40)", borderRadius: 8, padding: "16px 18px", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <FileText size={16} color="#C9A227" style={{ flexShrink: 0 }} />
+                <h3 style={{ fontFamily: "'Fraunces', serif", fontWeight: 600, fontSize: 18, color: "#EDE9E0", margin: 0 }}>What changed in this redline</h3>
+              </div>
+              <div style={{ fontSize: 12.5, color: "#9A968C", marginBottom: 12 }}>
+                {entry.markup.deletions.length} deletion{entry.markup.deletions.length === 1 ? "" : "s"} ·{" "}
+                {entry.markup.insertions.length} insertion{entry.markup.insertions.length === 1 ? "" : "s"} ·{" "}
+                {entry.markup.comments.length} comment{entry.markup.comments.length === 1 ? "" : "s"}. None of this is visible in the document text itself.
+              </div>
+              {((c.markupReview) || []).map((r, i) => {
+                const col = HARM_COLOR[r.harmLevel] || "#9A968C";
+                return (
+                  <div key={i} style={{ borderLeft: `3px solid ${col}`, background: "#15171D", borderRadius: 6, padding: "12px 14px", marginBottom: 9 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <strong style={{ fontSize: 14.5, color: "#EDE9E0" }}>{r.what}</strong>
+                      <Pill color={col}>Harm: {r.harmLevel}</Pill>
+                    </div>
+                    {r.before && (
+                      <div style={{ fontSize: 13, color: "#C9C5BB", marginTop: 7, lineHeight: 1.5 }}>
+                        <strong style={{ color: "#E08A75" }}>Was: </strong><span style={{ textDecoration: "line-through", color: "#9A968C" }}>{r.before}</span>
+                      </div>
+                    )}
+                    {r.after && (
+                      <div style={{ fontSize: 13, color: "#C9C5BB", marginTop: 3, lineHeight: 1.5 }}>
+                        <strong style={{ color: "#7FB08C" }}>Now: </strong>{r.after}
+                      </div>
+                    )}
+                    {r.effect && <p style={{ fontSize: 13.5, color: "#C9C5BB", lineHeight: 1.55, margin: "8px 0 0" }}>{r.effect}</p>}
+                    {r.theirReason && (
+                      <div style={{ fontSize: 12.5, color: "#C9C5BB", background: "#12141A", border: "1px solid #2A2E37", borderRadius: 5, padding: "8px 10px", marginTop: 8, lineHeight: 1.5 }}>
+                        <strong style={{ color: "#C9A227" }}>Their stated reason: </strong>&ldquo;{r.theirReason}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!((c.markupReview) || []).length && (
+                <div style={{ fontSize: 13, color: "#9A968C" }}>The analysis did not return a breakdown of the changes. The raw counts above still apply — open the file in Word with markup shown.</div>
+              )}
+            </div>
+          )}
+
+          {(entry.audit || []).length > 0 && (
+            <div style={{ background: "rgba(179,64,47,0.10)", border: "1px solid rgba(179,64,47,0.40)", borderRadius: 7, padding: "12px 14px", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, fontWeight: 600, fontSize: 13, color: "#E08A75", marginBottom: 6 }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0 }} /> Unverified figures in this analysis
+              </div>
+              {(entry.audit || []).map((w, i) => (
+                <div key={i} style={{ fontSize: 13, color: "#C9C5BB", lineHeight: 1.5 }}>• {w}</div>
+              ))}
+              <div style={{ fontSize: 12, color: "#9A968C", marginTop: 6, lineHeight: 1.45 }}>
+                These were checked against the document text by code. Confirm them in the contract before relying on them.
+              </div>
+            </div>
+          )}
+
           {entry.researchStatus === "running" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#9A968C", fontSize: 13.5, marginBottom: 18 }}>
               <Loader2 size={15} className="spin" /> Researching how other artists experience these terms...
@@ -564,8 +623,11 @@ export default function ContractClarity() {
   }
 
   async function extractDocx(file) {
-    const result = await mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-    return (result.value || "").trim();
+    const buf = await file.arrayBuffer();
+    let markup = null;
+    try { markup = await extractDocxMarkup(buf.slice(0)); } catch (e) { markup = null; }
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return { text: (result.value || "").trim(), markup };
   }
 
   const handleFiles = useCallback((fileList) => {
@@ -645,7 +707,13 @@ export default function ContractClarity() {
       acc.push(entry);
       if (d.file) {
         try {
-          entry.text = d.kind === "pdf" ? await extractPdf(d.file) : await extractDocx(d.file);
+          if (d.kind === "pdf") {
+            entry.text = await extractPdf(d.file);
+          } else {
+            const got = await extractDocx(d.file);
+            entry.text = got.text;
+            entry.markup = got.markup;
+          }
         } catch (err) {
           console.error(err);
           entry.error = "This file couldn't be read. Try pasting its text instead.";
@@ -656,8 +724,9 @@ export default function ContractClarity() {
           push(); continue;
         }
       }
-      const r = await callBackend("/api/analyze", { contractText: entry.text });
+      const r = await callBackend("/api/analyze", { contractText: entry.text, markup: entry.markup });
       if (r.error) { entry.error = r.error; push(); continue; }
+      entry.audit = Array.isArray(r.audit) ? r.audit : [];
       try { entry.classification = parseJson(r.text); }
       catch (e) { entry.error = "The analysis reply couldn't be read. Try again."; push(); continue; }
       entry.researchStatus = "running";
@@ -681,7 +750,7 @@ export default function ContractClarity() {
     if (good.length >= 2) {
       setProgress("Comparing the documents against each other...");
       setConflicts({ status: "running", items: [] });
-      const cr = await callBackend("/api/conflicts", { documents: good.map((g) => ({ name: g.name, text: g.text, classification: g.classification })) });
+      const cr = await callBackend("/api/conflicts", { documents: good.map((g) => ({ name: g.name, text: g.text, classification: g.classification, markup: g.markup })) });
       try {
         if (cr.error) throw new Error(cr.error);
         const parsed = parseJson(cr.text);
@@ -727,6 +796,25 @@ export default function ContractClarity() {
       lines.push("Choice of law: " + (c.choiceOfLawState || "Not stated in contract"));
       if (c.disputeForum) lines.push("Where disputes go: " + c.disputeForum);
       lines.push("Counterparty: " + (c.operativeName || "Not clearly identified"));
+      if (e.markup && e.markup.hasMarkup) {
+        lines.push("");
+        lines.push("WHAT CHANGED IN THIS REDLINE — " + e.markup.deletions.length + " deletion(s), "
+          + e.markup.insertions.length + " insertion(s), " + e.markup.comments.length + " comment(s)");
+        ((c.markupReview) || []).forEach((r) => {
+          lines.push("");
+          lines.push("  " + (r.what || "").toUpperCase() + "   |   Harm level: " + r.harmLevel);
+          if (r.before) lines.push("  Was: " + r.before);
+          if (r.after) lines.push("  Now: " + r.after);
+          if (r.effect) lines.push("  " + r.effect);
+          if (r.theirReason) lines.push("  Their stated reason: \"" + r.theirReason + "\"");
+        });
+        if (!((c.markupReview) || []).length) lines.push("  (no breakdown returned)");
+      }
+      if ((e.audit || []).length) {
+        lines.push("");
+        lines.push("!! UNVERIFIED FIGURES — checked against the document text by code:");
+        (e.audit || []).forEach((w) => lines.push("   - " + w));
+      }
       lines.push("");
       (c.clauses || []).slice()
         .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
