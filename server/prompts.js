@@ -1,10 +1,16 @@
 import { extractDocFacts, renderDocFacts } from "./docfacts.js";
-import { renderMarkup, renderMarkupBrief } from "./markup.js";
+import { q, renderMarkup, renderMarkupBrief } from "./markup.js";
 
 // Prompt builders for the Claude calls. They live on the server so the API key
 // and prompts never reach the browser.
+export const ROLES = {
+  artist: { label: "The artist", audience: "an artist who is not a lawyer", side: "the artist", counsel: false },
+  counsel: { label: "The artist's attorney", audience: "the artist's attorney, who is negotiating this contract for the artist", side: "the artist", counsel: true },
+  company: { label: "The agency or company", audience: "the agency or company that is the artist's counterparty (not a lawyer)", side: "the agency or company", counsel: false },
+};
 
-// ---------------------------------------------------------------------------
+export const TEXT_LIMIT = 100000;
+
 const RUBRIC = `RATING RUBRIC — apply it strictly and literally so that repeated runs on the same contract give the same ratings:
 harmLevel:
 - "high" = could cost the artist a significant share of income; gives away ownership or rights permanently or for an undefined period; blocks the artist from working with others; waives important legal rights (right to sue, injury claims); makes leaving very difficult; or appears to conflict with a statute.
@@ -15,16 +21,31 @@ negotiability:
 - "medium" = changes are possible with pushback or leverage.
 - "high" = commonly changed on request (commission rate, term length, exclusivity scope, approval rights, confidentiality carve-outs, ownership vs. license of the artist's own materials).`;
 
-export function buildClassifyPrompt(text, markup) {
+function roleBlock(opts) {
+  const r = ROLES[opts.role] || ROLES.artist;
+  const L = [`WHO YOU ARE ADVISING: ${r.audience}. "The user" below means them; "the user's side" is ${r.side}.`];
+  if (opts.role === "company") L.push(`Rate harm as harm to the agency or company's side. Where the rubric says "the artist", read it as "the user's side".`);
+  if (r.counsel) L.push("Write for a lawyer: precise, cite sections, legal terms are fine. Where a fix is possible, give short counter-language the user could paste into the draft (in counterLanguage fields). Never invent facts about the parties.");
+  else L.push("Write plain English for someone with no legal background. Set every counterLanguage field to null.");
+  if (opts.whose === "mine") L.push("This draft was written by the user's side. Terms the user's side proposed are its own position: where one gives something up on purpose, set \"concession\": true and describe it as a concession the user offered, not as harm done to them.");
+  if (opts.whose === "theirs") L.push("This draft comes from the other side.");
+  return L.join("\n");
+}
+
+export function buildClassifyPrompt(text, org, opts) {
   const facts = renderDocFacts(extractDocFacts(text));
-  const markupBlock = renderMarkup(markup);
-  return `You are analyzing an entertainment-industry contract (music, talent agency, management, likeness release, or similar) for an artist who is not a lawyer. Read the contract text below and respond ONLY with valid JSON, no preamble, no markdown fences.
+  const markupBlock = renderMarkup(org);
+  const r = ROLES[opts.role] || ROLES.artist;
+  return `You are analyzing an entertainment-industry contract (music, talent agency, management, likeness release, or similar). Read the contract text below and respond ONLY with valid JSON, no preamble, no markdown fences.
+
+${roleBlock(opts)}
 
 Extract:
 - "contractType": a short plain-English label for what kind of contract this is (e.g. "Talent agency agreement", "Record deal", "Likeness release", "Management agreement")
 - "choiceOfLawState": the state named in the choice-of-law / governing-law clause (full name). If there is no governing-law clause but the contract clearly operates under one state's statutes (e.g. it cites the California Labor Code), give that state and add " (implied, no governing-law clause)". Otherwise null.
 - "disputeForum": one short sentence on where and how disputes are decided (court, arbitration body and city, a state agency such as a Labor Commissioner) and who pays, or null if not stated
-- "operativeName": the name of the company, label, agency, publisher, or manager who is the counterparty offering the contract, or null if unclear
+- "operativeName": the name of the company, label, agency, publisher, or manager who is the artist's counterparty, or null if unclear
+- "neededDocuments": an array of documents the user needs to see before signing that were NOT given to you: schedules, exhibits, other agreements, fee schedules, licenses or prior drafts that this contract or a comment refers to. Each entry: { "name": the document's name as the contract or comment gives it, "why": one sentence on what cannot be checked without it, naming the section }. If a redline's changes cannot be read fully because the earlier draft it answers is missing, name that draft here. Empty array if none.
 - "clauses": an array covering EVERY one of these categories that is actually present in the contract. Do not skip a present category, and do not include categories that are absent:
   - compensation: commissions, fee percentages, royalty rates, how "gross" is defined, who sets the rate, missing fee schedules, or the absence of any payment to the artist
   - fees_repayment: fees or expenses the artist pays or must repay, penalties, deadlines
@@ -42,21 +63,38 @@ Extract:
   - dispute_resolution: arbitration, venue, who pays, confidentiality of proceedings
   - assignment: whether the company can transfer the contract to someone else
   - drafting: drafting problems that matter — blank lines that should be filled in (approval dates, license numbers), referenced schedules or attachments that are missing, garbled or incomplete sentences, cross-references that point to the wrong section. Combine them into one entry.
-  - other: any other term that could materially harm the artist and fits none of the above (include a short "title" for it)
+  - other: any other term that could materially harm the user's side and fits none of the above (include a short "title" for it)
   For each present category include:
   - "category": one of the category keys above
-  - "title": only for "other" — a short plain-English heading
-  - "plainEnglish": 2-3 plain-English sentences explaining what this clause actually does for an artist with no legal background
+  - "title": only for "other" — a short heading
+  - "plainEnglish": 2-3 sentences explaining what this clause actually does
   - "negotiability": "low" | "medium" | "high" — per the rubric below
   - "harmLevel": "low" | "medium" | "high" — per the rubric below
+  - "concession": true only when the user's own side wrote this term and it gives something up on purpose (see above); otherwise false
   - "harmDuration": a short phrase on how long this term's effects follow the artist
-  - "revenueImpact": a short plain-English note on where money is lost, taken, or withheld because of this clause, or null if not applicable
-  - "worksInYourFavor": if any wording in this clause protects or benefits the artist (for example, language preserving claims the artist doesn't yet know about, a statutory forum that is free for the artist, a cap, a notice right), one plain-English sentence saying so; otherwise null. Do not present protective language as a limitation. This field must never contradict this clause's own "plainEnglish". Rely only on wording that plainly does protect the artist: if "plainEnglish" says the term is unclear, undefined, ambiguous, or contradicted elsewhere in the contract, do NOT state the favorable reading here as settled — either return null, or say in the sentence that it is only one of two possible readings. A favorable reading that depends on winning an argument about what the clause means is not something that works in the artist's favor.
-  - "statuteFlag": if this clause cites or plainly relies on a statute and its wording appears to depart from what that statute provides (for example, reversing who must repay whom), one plain-English sentence saying so, starting with "This appears to"; otherwise null. Only flag what you are confident about.
+  - "revenueImpact": a short note on where money is lost, taken, or withheld because of this clause, or null if not applicable
+  - "worksInYourFavor": if any wording in this clause protects or benefits the user's side (for example, language preserving claims not yet known, a statutory forum that is free for the artist, a cap, a notice right), one sentence saying so; otherwise null. Do not present protective language as a limitation. This field must never contradict this clause’s own "plainEnglish". Rely only on wording that plainly does protect the user: if "plainEnglish" says the term is unclear, undefined, ambiguous, or contradicted elsewhere in the contract, do NOT state the favorable reading here as settled — either return null, or say in the sentence that it is only one of two possible readings.
+  - "statuteFlag": if this clause cites or plainly relies on a statute and its wording appears to depart from what that statute provides (for example, reversing who must repay whom), one sentence saying so, starting with "This appears to"; otherwise null. Only flag what you are confident about.
+  - "counterLanguage": ${r.counsel ? "short replacement or added wording that would fix the problem, ready to paste into the draft, or null if the clause is fine" : "null"}
   - "sections": the section/clause/paragraph identifiers WHERE THE LANGUAGE YOU RELY ON ACTUALLY APPEARS, exactly as numbered in the contract (e.g. ["4.2"] or ["Paragraph 7"]). If the language is in unnumbered text such as the opening paragraph or a signature page, use "Opening paragraph" or "Signature page". Never cite a section just because it is related. Empty array if the contract has no numbering at all.
   - "pages": an array of page numbers this analysis is based on, as integers. The contract text may contain markers like "===== PAGE 3 =====" — use those. If there are NO such page markers in the text, return an empty array (do not guess page numbers).
-  - "sourceQuotes": an array of 1-3 SHORT verbatim quotes (each roughly 8-25 words) copied EXACTLY from the contract text — the specific language this analysis is based on. Copy the words as they literally appear. If nothing can be quoted, return an empty array.
-- "markupReview": an array. If the TRACKED CHANGES AND COMMENTS block is present below, cover EVERY material change in it; otherwise return an empty array. Each entry has: "what" (a short heading for the change), "before" (what the wording was before — quote the deleted text), "after" (what it says now, or "nothing" if text was simply removed), "effect" (2-3 plain-English sentences on what the change does to the artist), "harmLevel" ("low"|"medium"|"high" per the rubric, rating the CHANGE itself), and "theirReason" (the counterparty's comment explaining it, verbatim, or null). Judge each change by what it removes or adds, never by how the surviving text happens to read.
+  - "sourceQuotes": an array of 1-3 SHORT verbatim quotes (each roughly 8-25 words) copied EXACTLY from the contract text — the specific language this analysis is based on. If nothing can be quoted, return an empty array.
+- "markupReview": an array. If the TRACKED CHANGES AND COMMENTS block is present below, include one entry for EVERY change in its list A (group changes only when they are one edit split across refs); otherwise return an empty array. Each entry:
+  { "refs": ["T3", ...], "where": section label, "what": short heading,
+    "before": what the wording was (quote the deleted text, or "nothing" for a pure insertion),
+    "after": what it says now (quote, or "nothing" if text was simply removed),
+    "textNow": one sentence on what the clause means as it now stands,
+    "theyWant": what their comment asks for, if it asks for more or different than the edit does, else null,
+    "gap": one sentence on whether the difference between the text now and what they want helps or hurts the user, or null,
+    "askMoreThanEdit": true when their comment asks for more than their edit delivers,
+    "rejectedYourLanguage": true when the change strikes language the user's side had proposed,
+    "sideConfirmed": false when the author's side is listed as unknown, else true,
+    "effect": 2-3 sentences on what the change does to the user,
+    "harmLevel": "low"|"medium"|"high", rating the RESULTING TEXT against the text before the change, from the user's side,
+    "theirReason": the text of the comment listed next to that change, verbatim, or null,
+    "counterLanguage": ${r.counsel ? "short wording the user could propose in response, or null" : "null"} }
+- "openItems": an array with one entry for EVERY comment in list B of the TRACKED CHANGES AND COMMENTS block (empty array if there is no such block). Each entry:
+  { "ref": "C12", "where": section label, "theyAsk": one sentence on what they are asking for or objecting to, "matters": one sentence on why it matters to the user, "suggestedResponse": one or two sentences the user could answer with, "counterLanguage": ${r.counsel ? "short wording that answers the comment, or null" : "null"} }
 
 ${RUBRIC}
 
@@ -66,9 +104,10 @@ IMPORTANT: base "sections" and "pages" only on what is actually in the contract 
 ${facts}
 ===== END DOCUMENT FACTS =====
 ${markupBlock ? "\n===== TRACKED CHANGES AND COMMENTS (read from the file by code) =====\n" + markupBlock + "\n===== END TRACKED CHANGES AND COMMENTS =====\n" : ""}
+
 Contract text:
 ---
-${text.slice(0, 60000)}
+${text.slice(0, TEXT_LIMIT)}
 ---`;
 }
 
@@ -91,14 +130,13 @@ Return JSON shaped like:
     "operative": [ { "finding": "short plain-English finding specific to the named counterparty", "sourceTag": "short source disclaimer as above" } ]
   }
 }
-Include at most 2 findings per array per category. If nothing specific was found for "operative", return an empty array for it rather than guessing.`;
+Include at most 1 finding per array per category; skip a category if nothing specific turned up. If nothing specific was found for "operative", return an empty array for it rather than guessing.`;
 }
 
 // Render the findings the per-document pass already reached, so the conflicts
 // pass is not a second, independent reading of the same clauses. Without this
 // the two passes can state opposite conclusions about one clause in the same
-// report (e.g. "the restriction is broader" vs "it only covers engaged
-// Projects"), because neither can see what the other concluded.
+// report, because neither can see what the other concluded.
 function renderFindings(cls) {
   const clauses = (cls && cls.clauses) || [];
   if (!clauses.length) return "  (no clause findings available for this document)";
@@ -113,7 +151,7 @@ function renderFindings(cls) {
   }).join("\n");
 }
 
-export function buildConflictPrompt(entries) {
+export function buildConflictPrompt(entries, opts) {
   const n = Math.max(1, entries.length);
   const findings = entries.map((e) => renderFindings(e.classification));
   const used = findings.reduce((t, f) => t + f.length, 0);
@@ -128,14 +166,16 @@ ESTABLISHED FINDINGS for this document read on its own:
 ${findings[i]}
 DOCUMENT FACTS (computed from the text by code — authoritative, overrides your own reading):
 ${renderDocFacts(extractDocFacts(e.text))}
-${renderMarkupBrief(e.markup) ? renderMarkupBrief(e.markup) + "\n" : ""}Full text:
+${renderMarkupBrief(e.org) ? renderMarkupBrief(e.org) + "\n" : ""}Full text${e.text.length > per ? " (FIRST " + per + " CHARACTERS ONLY — the rest was not sent)" : ""}:
 ${e.text.slice(0, per)}`;
   }).join("\n\n");
-  return `These documents are being signed together by the same artist with the same company. Compare them and find CONFLICTS or INTERACTIONS between them that matter to the artist: for example, different dispute forums or costs, different governing law, one document's duration depending on an undefined term in another, inconsistent definitions, rights granted in one that undercut protections in the other, or obligations that stack. Only report real conflicts that are supported by the text. Respond ONLY with valid JSON, no preamble, no markdown fences:
-{ "conflicts": [ { "title": "short plain-English heading", "explanation": "2-3 plain-English sentences on the conflict and why it matters to the artist", "harmLevel": "low" | "medium" | "high", "references": [ { "document": "exact document name as given above", "sections": ["section ids as numbered in that document"] } ], "revises": { "document": "exact document name", "category": "the category key of the established finding you are departing from", "note": "one plain-English sentence on why reading the documents together changes that finding" } } ] }
+  return `These are SEPARATE documents (not drafts of one agreement) that are being signed together by the same artist with the same company. Compare them and find CONFLICTS or INTERACTIONS between them that matter to the user: for example, different dispute forums or costs, different governing law, one document's duration depending on an undefined term in another, inconsistent definitions, rights granted in one that undercut protections in the other, or obligations that stack. Only report real conflicts that are supported by the text. Respond ONLY with valid JSON, no preamble, no markdown fences:
+{ "conflicts": [ { "title": "short heading", "explanation": "2-3 sentences on the conflict and why it matters to the user", "harmLevel": "low" | "medium" | "high", "references": [ { "document": "exact document name as given above", "sections": ["section ids as numbered in that document"] } ], "revises": { "document": "exact document name", "category": "the category key of the established finding you are departing from", "note": "one sentence on why reading the documents together changes that finding" } } ] }
 "revises" is null unless the rule below requires it. Return { "conflicts": [] } if there are none.
 
-CONSISTENCY REQUIREMENT — the artist reads your conflicts and the ESTABLISHED FINDINGS above in a single report, so the two must never state opposite conclusions about the same clause:
+${roleBlock(opts)}
+
+CONSISTENCY REQUIREMENT — the user reads your conflicts and the ESTABLISHED FINDINGS above in a single report, so the two must never state opposite conclusions about the same clause:
 - The ESTABLISHED FINDINGS are the settled reading of each document standing alone, produced by the earlier pass of this same analysis. Treat them as given.
 - Do not repeat a finding as if it were a conflict. A conflict must arise from the documents' interaction, not from one document alone.
 - Before reporting a conflict, check it against every finding for the documents it references. If your conflict would contradict one — for example by calling a restriction broader where the finding records it as limited — you must fill in "revises" naming that document and category and saying why the combined reading differs. Never contradict an established finding with "revises" left null; if you cannot justify the departure, drop the conflict.
@@ -145,4 +185,37 @@ CONSISTENCY REQUIREMENT — the artist reads your conflicts and the ESTABLISHED 
 ${RUBRIC}
 
 ${blocks}`;
+}
+
+const WHOSE_LABEL = { mine: "the user's side", theirs: "the other side", unknown: "unknown (the user did not say)" };
+
+export function buildComparePrompt(older, newer, hunks, opts) {
+  const LIMIT = 120;
+  const shown = hunks.slice(0, LIMIT);
+  const r = ROLES[opts.role] || ROLES.artist;
+  const list = shown.map((h, i) => `D${i + 1} at §${h.where || "?"}:\n   BEFORE: ${q(h.before)}\n   AFTER:  ${q(h.after)}`).join("\n");
+  return `Two drafts of the SAME agreement are compared below. The differences were computed by code, sentence by sentence, from the text of each draft with any tracked changes applied. Respond ONLY with valid JSON, no preamble, no markdown fences.
+
+${roleBlock(opts)}
+
+EARLIER DRAFT: "${older.name}" (dated ${older.vdate || "unknown"}; written by ${WHOSE_LABEL[older.whose || "unknown"]})
+LATER DRAFT:   "${newer.name}" (dated ${newer.vdate || "unknown"}; written by ${WHOSE_LABEL[newer.whose || "unknown"]})
+The side that wrote the LATER draft made these changes. If the later draft's author is unknown, say so instead of guessing.
+
+DIFFERENCES (${hunks.length}${hunks.length > LIMIT ? `, first ${LIMIT} shown — say in "summary" that the rest were not reviewed` : ""}):
+${list || "(no wording differences found)"}
+
+Return:
+{ "summary": "2-3 sentences: who moved, on which points, and what is still open",
+  "changes": [ { "refs": ["D1", ...], "where": section label, "what": short heading, "before": short quote, "after": short quote,
+                 "movedBy": "user" | "other side" | "unknown",
+                 "effect": "1-2 sentences on what the change does to the user",
+                 "direction": "better for the user" | "worse for the user" | "neutral",
+                 "status": "agreed" | "open" | "concession by user" | "concession by other side",
+                 "harmLevel": "low"|"medium"|"high" (harm to the user's side from the change, per the rubric),
+                 "counterLanguage": ${r.counsel ? "short wording the user could propose, or null" : "null"} } ],
+  "stillOpen": [ "one short line per point that still needs agreement" ] }
+Group differences that are one edit split across sentences. Skip pure formatting, numbering and typo fixes unless they change meaning; mention them in one "changes" entry titled "Formatting and typo fixes" if there are any. Never describe a change the BEFORE/AFTER text does not show.
+
+${RUBRIC}`;
 }
