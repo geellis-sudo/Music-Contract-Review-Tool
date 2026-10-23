@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import Anthropic from "@anthropic-ai/sdk";
-import { buildClassifyPrompt, buildResearchPrompt, buildConflictPrompt } from "./prompts.js";
+import { buildClassifyPrompt, buildResearchPrompt, buildConflictPrompt, buildComparePrompt } from "./prompts.js";
 import { extractDocFacts, auditClaims } from "./docfacts.js";
 
 dotenv.config();
@@ -31,18 +31,32 @@ function extractText(msg) {
     .join("\n");
 }
 
+// Stop the Claude call when the browser goes away (the Stop button aborts the
+// fetch), so a cancelled run does not keep spending tokens.
+function abortOnClose(req, res) {
+  const ctl = new AbortController();
+  res.on("close", () => { if (!res.writableEnded) ctl.abort(); });
+  return ctl.signal;
+}
+
+function sendError(res, err, label) {
+  if (err && (err.name === "AbortError" || err.constructor?.name === "APIUserAbortError")) return; // browser left
+  console.error(label + " failed:", err);
+  if (!res.headersSent) res.status(500).json({ error: err.message || "Request failed." });
+}
+
 // --- 1. Clause analysis (no tools) -----------------------------------------
 app.post("/api/analyze", async (req, res) => {
-  const { contractText, markup } = req.body || {};
+  const { contractText, org, opts } = req.body || {};
   if (!contractText || !contractText.trim()) {
     return res.status(400).json({ error: "No contract text provided." });
   }
   try {
     const msg = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 8000,
-      messages: [{ role: "user", content: buildClassifyPrompt(contractText, markup) }],
-    });
+      max_tokens: 16000,
+      messages: [{ role: "user", content: buildClassifyPrompt(contractText, org, opts || {}) }],
+    }, { signal: abortOnClose(req, res) });
     const text = extractText(msg);
     // Check the model's figures against the document before they reach the user.
     let audit = [];
@@ -56,8 +70,7 @@ app.post("/api/analyze", async (req, res) => {
     } catch (e) { audit = []; }
     res.json({ text, audit });
   } catch (err) {
-    console.error("analyze failed:", err);
-    res.status(500).json({ error: err.message || "Analysis failed." });
+    sendError(res, err, "analyze");
   }
 });
 
@@ -81,17 +94,16 @@ app.post("/api/research", async (req, res) => {
           max_uses: 8,
         },
       ],
-    });
+    }, { signal: abortOnClose(req, res) });
     res.json({ text: extractText(msg) });
   } catch (err) {
-    console.error("research failed:", err);
-    res.status(500).json({ error: err.message || "Research failed." });
+    sendError(res, err, "research");
   }
 });
 
 // --- 3. Conflicts between related documents (no tools) ---------------------
 app.post("/api/conflicts", async (req, res) => {
-  const { documents } = req.body || {};
+  const { documents, opts } = req.body || {};
   if (!Array.isArray(documents) || documents.length < 2) {
     return res.status(400).json({ error: "At least two analyzed documents are needed." });
   }
@@ -99,12 +111,31 @@ app.post("/api/conflicts", async (req, res) => {
     const msg = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 4000,
-      messages: [{ role: "user", content: buildConflictPrompt(documents) }],
-    });
+      messages: [{ role: "user", content: buildConflictPrompt(documents, opts || {}) }],
+    }, { signal: abortOnClose(req, res) });
     res.json({ text: extractText(msg) });
   } catch (err) {
-    console.error("conflicts failed:", err);
-    res.status(500).json({ error: err.message || "Comparison failed." });
+    sendError(res, err, "conflicts");
+  }
+});
+
+// --- 4. Two drafts of one agreement (no tools) -------------------------------
+// The differences are computed in the browser (diffVersions); this call only
+// reads them.
+app.post("/api/compare", async (req, res) => {
+  const { older, newer, hunks, opts } = req.body || {};
+  if (!older || !newer || !Array.isArray(hunks)) {
+    return res.status(400).json({ error: "Two drafts and their differences are needed." });
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 8000,
+      messages: [{ role: "user", content: buildComparePrompt(older, newer, hunks, opts || {}) }],
+    }, { signal: abortOnClose(req, res) });
+    res.json({ text: extractText(msg) });
+  } catch (err) {
+    sendError(res, err, "compare");
   }
 });
 
